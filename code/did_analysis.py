@@ -5,115 +5,100 @@
 # Output: LaTeX table in output/tables/did_table.tex
 # Reference: Blake et al. (2014), Taddy Ch. 5
 
-import pandas as pd
-import numpy as np
 import os
-
-# Load pivot tables
-treated = pd.read_csv("temp/treated_pivot.csv", index_col=0)
-untreated = pd.read_csv("temp/untreated_pivot.csv", index_col=0)
-
-# Compute log revenue
-treated_log = np.log(treated)
-untreated_log = np.log(untreated)
-
-# Compute pre-post change for each DMA
-treated_diff = treated_log.iloc[-1] - treated_log.iloc[0]
-untreated_diff = untreated_log.iloc[-1] - untreated_log.iloc[0]
-
-# Means
-r1 = treated_diff.mean()
-r0 = untreated_diff.mean()
-
-# DID estimate
-gamma_hat = r1 - r0
-
-# Standard error
-se = np.sqrt(treated_diff.var(ddof=1)/len(treated_diff) +
-             untreated_diff.var(ddof=1)/len(untreated_diff))
-
-# 95% confidence interval
-ci_low = gamma_hat - 1.96*se
-ci_high = gamma_hat + 1.96*se
-
-print("Gamma hat:", round(gamma_hat, 4))
-print("Std Error:", round(se, 4))
-print("95% CI:", [round(ci_low,4), round(ci_high,4)])
-
-# Save LaTeX table
-os.makedirs("output/tables", exist_ok=True)
-
-with open("output/tables/did_table.tex", "w") as f:
-    f.write("\\begin{tabular}{lccc}\n")
-    f.write("\\hline\n")
-    f.write("Estimate & Std. Error & CI Low & CI High \\\\\n")
-    f.write("\\hline\n")
-    f.write(f"{gamma_hat:.4f} & {se:.4f} & {ci_low:.4f} & {ci_high:.4f} \\\\\n")
-    f.write("\\hline\n")
-    f.write("\\end{tabular}\n")
-=======
-# DID Analysis Script
-# Estimates the average treatment effect of turning off eBay's paid search.
-# Uses preprocessed pivot tables from preprocess.py.
-# Output: LaTeX table in output/tables/did_table.tex
-
-import os
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-# Step 1 — Load the preprocessed data
-# Load pivot tables saved by preprocess.py
-treated_pivot = pd.read_csv('temp/treated_pivot.csv', index_col='dma')
-untreated_pivot = pd.read_csv('temp/untreated_pivot.csv', index_col='dma')
 
-# Step 2 — Compute the DID estimate
-# Means of log_revenue_diff
-r1_bar = treated_pivot['log_revenue_diff'].mean()
-r0_bar = untreated_pivot['log_revenue_diff'].mean()
+def main() -> None:
+    # Load pivot tables saved by preprocess.py
+    # These are expected to contain a column named 'log_revenue_diff'
+    treated_pivot = pd.read_csv("temp/treated_pivot.csv", index_col=0)
+    untreated_pivot = pd.read_csv("temp/untreated_pivot.csv", index_col=0)
 
-# DID estimate
-gamma_hat = r1_bar - r0_bar
+    if "log_revenue_diff" not in treated_pivot.columns or "log_revenue_diff" not in untreated_pivot.columns:
+        raise ValueError(
+            "Expected 'log_revenue_diff' column in temp/treated_pivot.csv and temp/untreated_pivot.csv. "
+            "Re-run preprocess.py or check the output format."
+        )
 
-# Sample variances (pandas .var() uses ddof=1 by default)
-var1 = treated_pivot['log_revenue_diff'].var()
-var0 = untreated_pivot['log_revenue_diff'].var()
+    # DID estimate on log scale
+    r1_bar = treated_pivot["log_revenue_diff"].mean()
+    r0_bar = untreated_pivot["log_revenue_diff"].mean()
+    gamma_hat = r1_bar - r0_bar
 
-# Sample sizes
-n1 = treated_pivot['log_revenue_diff'].count()
-n0 = untreated_pivot['log_revenue_diff'].count()
+    # Standard error (independent samples)
+    var1 = treated_pivot["log_revenue_diff"].var(ddof=1)
+    var0 = untreated_pivot["log_revenue_diff"].var(ddof=1)
+    n1 = treated_pivot["log_revenue_diff"].count()
+    n0 = untreated_pivot["log_revenue_diff"].count()
+    se = np.sqrt(var1 / n1 + var0 / n0)
 
-# Standard error
-se = np.sqrt(var1 / n1 + var0 / n0)
+    # 95% confidence interval (log scale)
+    ci_lower = gamma_hat - 1.96 * se
+    ci_upper = gamma_hat + 1.96 * se
 
-# 95% confidence interval
-ci_lower = gamma_hat - 1.96 * se
-ci_upper = gamma_hat + 1.96 * se
+    # Exponentiated (levels) results
+    gamma_hat_exp = np.exp(gamma_hat)
+    ci_lower_exp = np.exp(ci_lower)
+    ci_upper_exp = np.exp(ci_upper)
 
-# Step 3 — Print results to the console
-print("DID Results (Log Scale)")
-print("=======================")
-print(f"Gamma hat: {gamma_hat:.4f}")
-print(f"Std Error: {se:.4f}")
-print(f"95% CI: [{ci_lower:.4f}, {ci_upper:.4f}]")
+    # Print results
+    print("DID Results (Log Scale)")
+    print("=======================")
+    print(f"Gamma hat: {gamma_hat:.4f}")
+    print(f"Std Error: {se:.4f}")
+    print(f"95% CI: [{ci_lower:.4f}, {ci_upper:.4f}]")
 
-# Step 4 — Output a LaTeX table fragment
-os.makedirs('output/tables', exist_ok=True)
+    # Write LaTeX table (two columns)
+    os.makedirs("output/tables", exist_ok=True)
 
-latex = r"""\begin{table}[h]
+    latex = r"""\begin{table}[h]
 \centering
 \caption{Difference-in-Differences Estimate of the Effect of Paid Search on Revenue}
-\begin{tabular}{lc}
+\begin{tabular}{lcc}
 \hline
-& Log Scale \\
+& Log Scale & Levels (exp) \\
 \hline
-Point Estimate ($\hat{\gamma}$) & $%.4f$ \\
-Standard Error & $%.4f$ \\
-95\%% CI & $[%.4f, \; %.4f]$ \\
+Point Estimate ($\hat{\gamma}$) & $%.4f$ & $%.4f$ \\
+Standard Error & $%.4f$ & --- \\
+95\%% CI & $[%.4f, \; %.4f]$ & $[%.4f, \; %.4f]$ \\
 \hline
 \end{tabular}
 \label{tab:did}
-\end{table}""" % (gamma_hat, se, ci_lower, ci_upper)
+\end{table}""" % (
+        gamma_hat,
+        gamma_hat_exp,
+        se,
+        ci_lower,
+        ci_upper,
+        ci_lower_exp,
+        ci_upper_exp,
+    )
 
-with open('output/tables/did_table.tex', 'w') as f:
-    f.write(latex)
->>>>>>> 5b74e3a7bc733e4bc0a240cea866efaf20c75429
+    with open("output/tables/did_table.tex", "w") as f:
+        f.write(latex)
+
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
