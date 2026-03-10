@@ -35,3 +35,15 @@ clean:
 #    Skip:    output/figures/figure_5_2.png,
 #             output/figures/figure_5_3.png,
 #             output/tables/did_table.tex.
+
+
+# ----------------------------
+# Reflection
+# ----------------------------
+# The Makefile makes explicit the dependency relationships between data, code, intermediate
+# outputs, and the final paper. Unlike run_all.sh, which simply runs steps sequentially,
+# the Makefile declares which files depend on which inputs and scripts. This makes clear
+# exactly when a step needs to be rerun and when it can be skipped. A new collaborator can
+# immediately see the structure of the project and understand how raw data flows through
+# preprocessing and analysis into the final PDF. In this way, the Makefile turns an implicit
+# workflow into an explicit dependency graph.
